@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  # FastAPI Caching Proxy Server
+  proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: caching-proxy-server
+    ports:
+      - "8000:8000"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
+      - CACHE_BACKEND=${CACHE_BACKEND:-memory}
+      - CACHE_TTL=${CACHE_TTL:-300}
+      - MAX_CACHE_SIZE=${MAX_CACHE_SIZE:-1000}
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
+    networks:
+      - proxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Redis Cache Backend
+  redis:
+    image: redis:7-alpine
+    container_name: caching-proxy-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - proxy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - redis-data:/data
+
+networks:
+  proxy-network:
+    driver: bridge
+
+volumes:
+  redis-data:
+    driver: local
