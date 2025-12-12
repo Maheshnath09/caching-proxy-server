@@ -1,13 +1,3 @@
-# Multi-stage build for optimized image size
-FROM python:3.11-slim as builder
-
-# Set working directory
-WORKDIR /app
-
-# Install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
-
 # Final stage
 FROM python:3.11-slim
 
@@ -25,7 +15,8 @@ ENV PATH=/root/.local/bin:$PATH
 
 # Create non-root user for security
 RUN useradd -m -u 1000 appuser && \
-    chown -R appuser:appuser /app
+    chown -R appuser:appuser /app && \
+    chown -R appuser:appuser /root/.local # <--- CRITICAL ADDITION HERE!
 
 # Switch to non-root user
 USER appuser
