@@ -1,29 +1,45 @@
-# Final stage
+# ==========================================
+# STAGE 1: Builder (Install Dependencies)
+# ==========================================
 FROM python:3.11-slim AS builder
-# Set working directory
+
 WORKDIR /app
 
-# Copy Python dependencies from builder
-COPY --from=builder /root/.local /root/.local
+# Copy requirements first to leverage Docker cache
+COPY requirements.txt .
 
-# Copy application code
-COPY . .
+# Install dependencies to /root/.local
+RUN pip install --user --no-cache-dir -r requirements.txt
 
-# Make sure scripts in .local are usable
-ENV PATH=/root/.local/bin:$PATH
 
-# Create non-root user for security
-RUN useradd -m -u 1000 appuser && \
-    chown -R appuser:appuser /app && \
-    chown -R appuser:appuser /root/.local # <--- CRITICAL ADDITION HERE!
+# ==========================================
+# STAGE 2: Final Runtime
+# ==========================================
+FROM python:3.11-slim
 
-# Switch to non-root user
+WORKDIR /app
+
+# 1. Create the non-root user first
+RUN useradd -m -u 1000 appuser
+
+# 2. Copy the dependencies from the 'builder' stage
+# We copy them directly to the appuser's home folder so we don't need 'chown' hacks on /root
+COPY --from=builder --chown=appuser:appuser /root/.local /home/appuser/.local
+
+# 3. Copy application code and assign ownership to appuser immediately
+COPY --chown=appuser:appuser . .
+
+# 4. Update PATH so Python finds the packages in the new location
+ENV PATH=/home/appuser/.local/bin:$PATH
+
+# 5. Switch to non-root user
 USER appuser
 
 # Expose port
 EXPOSE 8000
 
 # Health check
+# Note: Ensure 'httpx' is listed in your requirements.txt for this to work
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import httpx; httpx.get('http://localhost:8000/health')" || exit 1
 
